@@ -1,374 +1,1177 @@
-import requests
-import streamlit as st
-
-# =============================
-# CONFIG
-# =============================
-API_BASE = "https://movie-rec-466x.onrender.com" or "http://127.0.0.1:8000"
-TMDB_IMG = "https://image.tmdb.org/t/p/w500"
-
-st.set_page_config(page_title="Movie Recommender", page_icon="🎬", layout="wide")
-
-# =============================
-# STYLES (minimal modern)
-# =============================
-st.markdown(
-    """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CINELEX — Movie Recommender</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
 <style>
-.block-container { padding-top: 1rem; padding-bottom: 2rem; max-width: 1400px; }
-.small-muted { color:#6b7280; font-size: 0.92rem; }
-.movie-title { font-size: 0.9rem; line-height: 1.15rem; height: 2.3rem; overflow: hidden; }
-.card { border: 1px solid rgba(0,0,0,0.08); border-radius: 16px; padding: 14px; background: rgba(255,255,255,0.7); }
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --black: #050505;
+    --near-black: #0e0e0e;
+    --dark: #161616;
+    --mid: #2a2a2a;
+    --light-mid: #3f3f3f;
+    --grey: #888;
+    --light-grey: #bbb;
+    --white: #f5f5f5;
+    --accent: #f5f5f5;
+    --accent-dim: rgba(245,245,245,0.08);
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--black);
+    color: var(--white);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 300;
+    min-height: 100vh;
+    overflow-x: hidden;
+    cursor: none;
+  }
+
+  /* Custom Cursor */
+  .cursor {
+    position: fixed;
+    width: 10px; height: 10px;
+    background: var(--white);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 9999;
+    transform: translate(-50%, -50%);
+    transition: transform 0.1s ease, width 0.3s ease, height 0.3s ease, background 0.3s ease;
+  }
+  .cursor-ring {
+    position: fixed;
+    width: 36px; height: 36px;
+    border: 1px solid rgba(245,245,245,0.4);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 9998;
+    transform: translate(-50%, -50%);
+    transition: all 0.18s ease;
+  }
+  body:has(button:hover) .cursor, body:has(a:hover) .cursor { width: 6px; height: 6px; }
+  body:has(button:hover) .cursor-ring, body:has(a:hover) .cursor-ring { width: 50px; height: 50px; }
+
+  /* Grain overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 100;
+    opacity: 0.4;
+  }
+
+  /* HEADER */
+  header {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 50;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 28px 56px;
+    border-bottom: 1px solid rgba(245,245,245,0.06);
+    background: rgba(5,5,5,0.85);
+    backdrop-filter: blur(20px);
+  }
+
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2rem;
+    letter-spacing: 0.12em;
+    color: var(--white);
+    text-decoration: none;
+  }
+  .logo span { color: var(--grey); }
+
+  nav { display: flex; gap: 36px; }
+  nav a {
+    color: var(--grey);
+    text-decoration: none;
+    font-size: 0.78rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    transition: color 0.2s;
+    cursor: none;
+  }
+  nav a:hover { color: var(--white); }
+
+  /* HERO */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 120px 40px 80px;
+    position: relative;
+  }
+
+  .hero-eyebrow {
+    font-size: 0.72rem;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--grey);
+    margin-bottom: 24px;
+    animation: fadeUp 0.8s ease both;
+  }
+
+  .hero h1 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(5rem, 14vw, 13rem);
+    line-height: 0.88;
+    letter-spacing: 0.02em;
+    color: var(--white);
+    animation: fadeUp 0.8s 0.1s ease both;
+  }
+
+  .hero h1 em {
+    font-style: normal;
+    color: transparent;
+    -webkit-text-stroke: 1px rgba(245,245,245,0.35);
+  }
+
+  .hero-sub {
+    margin-top: 32px;
+    font-size: 1rem;
+    color: var(--grey);
+    max-width: 480px;
+    line-height: 1.7;
+    animation: fadeUp 0.8s 0.2s ease both;
+  }
+
+  .hero-cta {
+    margin-top: 48px;
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+    animation: fadeUp 0.8s 0.3s ease both;
+  }
+
+  .btn-primary {
+    background: var(--white);
+    color: var(--black);
+    border: none;
+    padding: 14px 40px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: none;
+    transition: all 0.25s ease;
+  }
+  .btn-primary:hover { background: var(--light-grey); transform: translateY(-2px); }
+
+  .btn-outline {
+    background: transparent;
+    color: var(--white);
+    border: 1px solid rgba(245,245,245,0.2);
+    padding: 14px 40px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 400;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: none;
+    transition: all 0.25s ease;
+  }
+  .btn-outline:hover { border-color: rgba(245,245,245,0.6); transform: translateY(-2px); }
+
+  /* Scrolling ticker */
+  .ticker-wrap {
+    overflow: hidden;
+    border-top: 1px solid rgba(245,245,245,0.07);
+    border-bottom: 1px solid rgba(245,245,245,0.07);
+    padding: 16px 0;
+    background: var(--near-black);
+  }
+  .ticker {
+    display: flex;
+    gap: 64px;
+    white-space: nowrap;
+    animation: ticker 28s linear infinite;
+  }
+  .ticker span {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.1rem;
+    letter-spacing: 0.18em;
+    color: var(--light-mid);
+  }
+  .ticker span.accent { color: var(--grey); }
+  @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+  /* MAIN SECTION */
+  .section {
+    padding: 100px 56px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .section-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--grey);
+    margin-bottom: 56px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(245,245,245,0.1);
+  }
+
+  /* SEARCH / QUIZ */
+  .recommender-panel {
+    background: var(--near-black);
+    border: 1px solid rgba(245,245,245,0.08);
+    padding: 56px;
+    position: relative;
+    overflow: hidden;
+  }
+  .recommender-panel::before {
+    content: '▶';
+    position: absolute;
+    right: 40px; top: 40px;
+    font-size: 7rem;
+    color: rgba(245,245,245,0.02);
+    font-family: 'Bebas Neue', sans-serif;
+    pointer-events: none;
+  }
+
+  .recommender-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 3.2rem;
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
+  }
+  .recommender-sub { color: var(--grey); font-size: 0.9rem; margin-bottom: 48px; }
+
+  /* Mood tags */
+  .mood-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 36px;
+  }
+
+  .mood-tag {
+    padding: 10px 22px;
+    border: 1px solid rgba(245,245,245,0.15);
+    background: transparent;
+    color: var(--light-grey);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    cursor: none;
+    transition: all 0.2s ease;
+    user-select: none;
+  }
+  .mood-tag:hover { border-color: rgba(245,245,245,0.4); color: var(--white); }
+  .mood-tag.active {
+    background: var(--white);
+    color: var(--black);
+    border-color: var(--white);
+    font-weight: 500;
+  }
+
+  /* Genre checkboxes */
+  .genre-section { margin-bottom: 36px; }
+  .genre-section h3 { font-size: 0.72rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--grey); margin-bottom: 16px; }
+
+  .genre-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+  }
+
+  .genre-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border: 1px solid rgba(245,245,245,0.1);
+    cursor: none;
+    transition: all 0.2s;
+  }
+  .genre-item:hover { border-color: rgba(245,245,245,0.3); background: var(--accent-dim); }
+  .genre-item input[type="checkbox"] { display: none; }
+  .genre-check {
+    width: 16px; height: 16px;
+    border: 1px solid rgba(245,245,245,0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s;
+  }
+  .genre-item.selected .genre-check {
+    background: var(--white);
+    border-color: var(--white);
+  }
+  .genre-item.selected .genre-check::after {
+    content: '✓';
+    font-size: 0.65rem;
+    color: var(--black);
+    font-weight: 700;
+  }
+  .genre-item span { font-size: 0.82rem; color: var(--light-grey); }
+  .genre-item.selected span { color: var(--white); }
+
+  /* Era slider */
+  .era-section { margin-bottom: 40px; }
+  .era-section h3 { font-size: 0.72rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--grey); margin-bottom: 16px; }
+  .era-label { display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--grey); margin-top: 10px; }
+  input[type="range"] {
+    width: 100%;
+    -webkit-appearance: none;
+    background: rgba(245,245,245,0.1);
+    height: 2px;
+    outline: none;
+    cursor: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px; height: 18px;
+    background: var(--white);
+    border-radius: 0;
+    cursor: none;
+  }
+
+  /* RESULTS */
+  .results-section { margin-top: 72px; }
+  .results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 36px;
+  }
+  .results-header h2 { font-family: 'Bebas Neue', sans-serif; font-size: 2.4rem; letter-spacing: 0.04em; }
+  .results-count { font-size: 0.78rem; color: var(--grey); letter-spacing: 0.1em; }
+
+  .movies-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 24px;
+  }
+
+  .movie-card {
+    background: var(--near-black);
+    border: 1px solid rgba(245,245,245,0.07);
+    overflow: hidden;
+    cursor: none;
+    transition: all 0.3s ease;
+    animation: fadeUp 0.5s ease both;
+    position: relative;
+    group: true;
+  }
+  .movie-card:hover {
+    border-color: rgba(245,245,245,0.25);
+    transform: translateY(-6px);
+  }
+
+  .movie-poster {
+    width: 100%;
+    aspect-ratio: 2/3;
+    background: var(--dark);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .movie-poster-inner {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+  }
+  .movie-poster-inner img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.5s ease;
+  }
+  .movie-card:hover .movie-poster-inner img { transform: scale(1.06); }
+  .poster-fallback {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(145deg, var(--dark) 0%, var(--mid) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 3rem;
+    color: rgba(245,245,245,0.08);
+    letter-spacing: 0.1em;
+    z-index: 0;
+  }
+
+  .movie-badge {
+    position: absolute;
+    top: 12px; right: 12px;
+    background: var(--black);
+    color: var(--white);
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 5px 10px;
+    border: 1px solid rgba(245,245,245,0.2);
+  }
+
+  .movie-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(5,5,5,0.88);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  .movie-card:hover .movie-overlay { opacity: 1; }
+
+  .overlay-btn {
+    padding: 10px 24px;
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-family: 'DM Sans', sans-serif;
+    cursor: none;
+    transition: all 0.2s;
+    border: none;
+    width: 160px;
+    text-align: center;
+  }
+  .overlay-btn.primary { background: var(--white); color: var(--black); font-weight: 500; }
+  .overlay-btn.secondary { background: transparent; color: var(--white); border: 1px solid rgba(245,245,245,0.3); }
+  .overlay-btn:hover { opacity: 0.8; }
+
+  .movie-info { padding: 16px 18px 20px; }
+  .movie-title { font-weight: 500; font-size: 0.92rem; line-height: 1.3; margin-bottom: 6px; }
+  .movie-meta { display: flex; align-items: center; gap: 10px; font-size: 0.75rem; color: var(--grey); }
+  .movie-rating { color: var(--white); font-weight: 500; }
+  .movie-dot { width: 3px; height: 3px; background: var(--light-mid); border-radius: 50%; }
+  .movie-genres-small { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .genre-pill {
+    font-size: 0.62rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--grey);
+    border: 1px solid rgba(245,245,245,0.1);
+    padding: 3px 8px;
+  }
+
+  /* WATCHLIST SIDEBAR */
+  .watchlist-float {
+    position: fixed;
+    bottom: 32px;
+    right: 32px;
+    z-index: 200;
+  }
+  .watchlist-btn {
+    background: var(--white);
+    color: var(--black);
+    border: none;
+    padding: 14px 22px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: all 0.2s;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  .watchlist-btn:hover { background: var(--light-grey); transform: translateY(-2px); }
+  .watchlist-count {
+    background: var(--black);
+    color: var(--white);
+    font-size: 0.65rem;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+  }
+
+  /* Watchlist Panel */
+  .watchlist-panel {
+    position: fixed;
+    top: 0; right: -420px;
+    width: 400px;
+    height: 100vh;
+    background: var(--near-black);
+    border-left: 1px solid rgba(245,245,245,0.1);
+    z-index: 300;
+    transition: right 0.4s cubic-bezier(0.4,0,0.2,1);
+    display: flex;
+    flex-direction: column;
+    padding: 40px 32px;
+    overflow-y: auto;
+  }
+  .watchlist-panel.open { right: 0; }
+
+  .panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 36px;
+  }
+  .panel-title { font-family: 'Bebas Neue', sans-serif; font-size: 2rem; letter-spacing: 0.06em; }
+  .close-btn {
+    background: none; border: none;
+    color: var(--grey); font-size: 1.5rem; cursor: none;
+    transition: color 0.2s;
+  }
+  .close-btn:hover { color: var(--white); }
+
+  .watchlist-item {
+    display: flex;
+    gap: 14px;
+    padding: 14px 0;
+    border-bottom: 1px solid rgba(245,245,245,0.07);
+    align-items: center;
+  }
+  .watchlist-item-num {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.8rem;
+    color: rgba(245,245,245,0.1);
+    width: 40px;
+    flex-shrink: 0;
+  }
+  .watchlist-item-info { flex: 1; }
+  .watchlist-item-title { font-size: 0.88rem; font-weight: 500; margin-bottom: 4px; }
+  .watchlist-item-meta { font-size: 0.72rem; color: var(--grey); }
+  .remove-btn { background: none; border: none; color: var(--light-mid); cursor: none; font-size: 1rem; transition: color 0.2s; }
+  .remove-btn:hover { color: var(--white); }
+
+  .watchlist-empty { text-align: center; color: var(--grey); font-size: 0.88rem; margin-top: 80px; line-height: 1.7; }
+  .watchlist-empty span { font-family: 'Bebas Neue', sans-serif; display: block; font-size: 4rem; color: rgba(245,245,245,0.05); margin-bottom: 16px; }
+
+  /* MODAL */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(5,5,5,0.92);
+    z-index: 400;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+
+  .modal {
+    background: var(--near-black);
+    border: 1px solid rgba(245,245,245,0.12);
+    max-width: 700px;
+    width: 100%;
+    padding: 0;
+    position: relative;
+    transform: translateY(20px);
+    transition: transform 0.3s ease;
+    display: flex;
+    overflow: hidden;
+  }
+  .modal-overlay.open .modal { transform: translateY(0); }
+
+  .modal-poster {
+    width: 200px;
+    flex-shrink: 0;
+    background: var(--dark);
+    position: relative;
+    overflow: hidden;
+  }
+  .modal-poster img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .modal-poster-fallback {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(145deg, var(--dark), var(--mid));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 4rem;
+    color: rgba(245,245,245,0.06);
+  }
+  .modal-body { padding: 40px; flex: 1; overflow-y: auto; }
+
+  .modal-close {
+    position: absolute;
+    top: 14px; right: 16px;
+    background: none; border: none;
+    color: var(--grey); font-size: 1.4rem; cursor: none;
+    z-index: 10;
+  }
+  .modal-close:hover { color: var(--white); }
+
+  .modal-rating { font-family: 'Bebas Neue', sans-serif; font-size: 5rem; line-height: 1; color: rgba(245,245,245,0.08); }
+  .modal-title { font-family: 'Bebas Neue', sans-serif; font-size: 2.8rem; line-height: 1.1; margin-bottom: 10px; letter-spacing: 0.04em; }
+  .modal-meta { display: flex; gap: 16px; color: var(--grey); font-size: 0.82rem; margin-bottom: 24px; flex-wrap: wrap; }
+  .modal-meta strong { color: var(--white); }
+  .modal-desc { color: var(--light-grey); line-height: 1.8; font-size: 0.92rem; margin-bottom: 32px; }
+  .modal-actions { display: flex; gap: 12px; }
+
+  /* Loading */
+  .loading {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 80px 0;
+    gap: 20px;
+  }
+  .loading.show { display: flex; }
+  .loader {
+    width: 40px; height: 40px;
+    border: 1px solid rgba(245,245,245,0.1);
+    border-top-color: var(--white);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  .loading-text { font-size: 0.78rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--grey); }
+
+  /* Search bar */
+  .search-bar {
+    display: flex;
+    gap: 0;
+    margin-bottom: 36px;
+  }
+  .search-input {
+    flex: 1;
+    background: var(--dark);
+    border: 1px solid rgba(245,245,245,0.12);
+    border-right: none;
+    color: var(--white);
+    padding: 14px 20px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .search-input::placeholder { color: var(--grey); }
+  .search-input:focus { border-color: rgba(245,245,245,0.35); }
+  .search-btn {
+    background: var(--white);
+    color: var(--black);
+    border: none;
+    padding: 14px 24px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: none;
+    white-space: nowrap;
+    transition: background 0.2s;
+  }
+  .search-btn:hover { background: var(--light-grey); }
+
+  /* Animations */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Empty results */
+  .no-results { text-align: center; padding: 80px 0; color: var(--grey); display: none; }
+  .no-results h3 { font-family: 'Bebas Neue', sans-serif; font-size: 3rem; color: rgba(245,245,245,0.08); margin-bottom: 16px; }
+
+  /* Divider */
+  .divider { height: 1px; background: rgba(245,245,245,0.07); }
+
+  /* Backdrop overlay for watchlist */
+  .backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 250;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  .backdrop.show { opacity: 1; pointer-events: all; }
+
+  @media (max-width: 768px) {
+    header { padding: 20px 24px; }
+    nav { display: none; }
+    .section { padding: 60px 24px; }
+    .recommender-panel { padding: 32px 24px; }
+    .hero h1 { font-size: 5rem; }
+    .watchlist-panel { width: 100%; right: -100%; }
+  }
 </style>
-""",
-    unsafe_allow_html=True,
-)
+</head>
+<body>
 
-# =============================
-# STATE + ROUTING (single-file pages)
-# =============================
-if "view" not in st.session_state:
-    st.session_state.view = "home"  # home | details
-if "selected_tmdb_id" not in st.session_state:
-    st.session_state.selected_tmdb_id = None
+<div class="cursor" id="cursor"></div>
+<div class="cursor-ring" id="cursorRing"></div>
 
-qp_view = st.query_params.get("view")
-qp_id = st.query_params.get("id")
-if qp_view in ("home", "details"):
-    st.session_state.view = qp_view
-if qp_id:
-    try:
-        st.session_state.selected_tmdb_id = int(qp_id)
-        st.session_state.view = "details"
-    except:
-        pass
+<!-- Header -->
+<header>
+  <a href="#" class="logo">CINE<span>LEX</span></a>
+  <nav>
+    <a href="#discover">Discover</a>
+    <a href="#" onclick="openWatchlist()">Watchlist</a>
+    <a href="#">Top Picks</a>
+  </nav>
+</header>
 
+<!-- Hero -->
+<section class="hero" id="home">
+  <p class="hero-eyebrow">Your personal cinema curator</p>
+  <h1>FIND YOUR<br><em>NEXT</em><br>FILM</h1>
+  <p class="hero-sub">Tell us your mood, pick your genres, and we'll surface films built exactly for this moment.</p>
+  <div class="hero-cta">
+    <button class="btn-primary" onclick="document.getElementById('discover').scrollIntoView({behavior:'smooth'})">Start Discovering</button>
+    <button class="btn-outline" onclick="showAll()">Browse All</button>
+  </div>
+</section>
 
-def goto_home():
-    st.session_state.view = "home"
-    st.query_params["view"] = "home"
-    if "id" in st.query_params:
-        del st.query_params["id"]
-    st.rerun()
+<!-- Ticker -->
+<div class="ticker-wrap">
+  <div class="ticker" id="ticker"></div>
+</div>
 
+<!-- Recommender -->
+<section class="section" id="discover">
+  <div class="section-label">Recommendation Engine</div>
 
-def goto_details(tmdb_id: int):
-    st.session_state.view = "details"
-    st.session_state.selected_tmdb_id = int(tmdb_id)
-    st.query_params["view"] = "details"
-    st.query_params["id"] = str(int(tmdb_id))
-    st.rerun()
+  <div class="recommender-panel">
+    <h2 class="recommender-title">WHAT ARE YOU<br>IN THE MOOD FOR?</h2>
+    <p class="recommender-sub">Select your current vibe, genres, and era — we'll handle the rest.</p>
 
+    <!-- Search -->
+    <div class="search-bar">
+      <input type="text" class="search-input" id="searchInput" placeholder="Search by title, director, or keyword…">
+      <button class="search-btn" onclick="handleSearch()">Search</button>
+    </div>
 
-# =============================
-# API HELPERS
-# =============================
-@st.cache_data(ttl=30)  # short cache for autocomplete
-def api_get_json(path: str, params: dict | None = None):
-    try:
-        r = requests.get(f"{API_BASE}{path}", params=params, timeout=25)
-        if r.status_code >= 400:
-            return None, f"HTTP {r.status_code}: {r.text[:300]}"
-        return r.json(), None
-    except Exception as e:
-        return None, f"Request failed: {e}"
+    <!-- Moods -->
+    <div style="margin-bottom:10px;font-size:0.72rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--grey)">Mood</div>
+    <div class="mood-grid" id="moodGrid">
+      <button class="mood-tag" data-mood="thrilling">Thrilling</button>
+      <button class="mood-tag" data-mood="emotional">Emotional</button>
+      <button class="mood-tag" data-mood="funny">Funny</button>
+      <button class="mood-tag" data-mood="dark">Dark</button>
+      <button class="mood-tag" data-mood="inspiring">Inspiring</button>
+      <button class="mood-tag" data-mood="romantic">Romantic</button>
+      <button class="mood-tag" data-mood="mindblowing">Mind-Bending</button>
+      <button class="mood-tag" data-mood="cozy">Cozy</button>
+    </div>
 
+    <!-- Genres -->
+    <div class="genre-section">
+      <h3>Genres</h3>
+      <div class="genre-grid" id="genreGrid">
+        <div class="genre-item" data-genre="action"><span class="genre-check"></span><span>Action</span></div>
+        <div class="genre-item" data-genre="drama"><span class="genre-check"></span><span>Drama</span></div>
+        <div class="genre-item" data-genre="scifi"><span class="genre-check"></span><span>Sci-Fi</span></div>
+        <div class="genre-item" data-genre="horror"><span class="genre-check"></span><span>Horror</span></div>
+        <div class="genre-item" data-genre="comedy"><span class="genre-check"></span><span>Comedy</span></div>
+        <div class="genre-item" data-genre="thriller"><span class="genre-check"></span><span>Thriller</span></div>
+        <div class="genre-item" data-genre="romance"><span class="genre-check"></span><span>Romance</span></div>
+        <div class="genre-item" data-genre="documentary"><span class="genre-check"></span><span>Documentary</span></div>
+        <div class="genre-item" data-genre="animation"><span class="genre-check"></span><span>Animation</span></div>
+        <div class="genre-item" data-genre="crime"><span class="genre-check"></span><span>Crime</span></div>
+        <div class="genre-item" data-genre="fantasy"><span class="genre-check"></span><span>Fantasy</span></div>
+        <div class="genre-item" data-genre="mystery"><span class="genre-check"></span><span>Mystery</span></div>
+      </div>
+    </div>
 
-def poster_grid(cards, cols=6, key_prefix="grid"):
-    if not cards:
-        st.info("No movies to show.")
-        return
+    <!-- Era -->
+    <div class="era-section">
+      <h3>Era — <span id="eraLabel">Any Decade</span></h3>
+      <input type="range" id="eraSlider" min="0" max="5" step="1" value="0" oninput="updateEra(this.value)">
+      <div class="era-label">
+        <span>Classic</span><span>70s</span><span>80s</span><span>90s</span><span>2000s</span><span>Modern</span>
+      </div>
+    </div>
 
-    rows = (len(cards) + cols - 1) // cols
-    idx = 0
-    for r in range(rows):
-        colset = st.columns(cols)
-        for c in range(cols):
-            if idx >= len(cards):
-                break
-            m = cards[idx]
-            idx += 1
+    <button class="btn-primary" onclick="getRecommendations()" style="width:100%;text-align:center;padding:18px;">
+      Generate Recommendations
+    </button>
+  </div>
 
-            tmdb_id = m.get("tmdb_id")
-            title = m.get("title", "Untitled")
-            poster = m.get("poster_url")
+  <!-- Loading -->
+  <div class="loading" id="loading">
+    <div class="loader"></div>
+    <p class="loading-text">Curating your perfect lineup…</p>
+  </div>
 
-            with colset[c]:
-                if poster:
-                    st.image(poster, use_column_width=True)
-                else:
-                    st.write("🖼️ No poster")
+  <!-- Results -->
+  <div class="results-section" id="resultsSection" style="display:none">
+    <div class="results-header">
+      <h2>YOUR PICKS</h2>
+      <span class="results-count" id="resultsCount">0 films</span>
+    </div>
+    <div class="movies-grid" id="moviesGrid"></div>
+    <div class="no-results" id="noResults">
+      <h3>NO FILMS FOUND</h3>
+      <p>Try adjusting your filters or broadening your selection.</p>
+    </div>
+  </div>
+</section>
 
-                if st.button("Open", key=f"{key_prefix}_{r}_{c}_{idx}_{tmdb_id}"):
-                    if tmdb_id:
-                        goto_details(tmdb_id)
+<!-- Watchlist Button -->
+<div class="watchlist-float">
+  <button class="watchlist-btn" onclick="openWatchlist()">
+    <span>Watchlist</span>
+    <span class="watchlist-count" id="watchlistCount">0</span>
+  </button>
+</div>
 
-                st.markdown(
-                    f"<div class='movie-title'>{title}</div>", unsafe_allow_html=True
-                )
+<!-- Backdrop -->
+<div class="backdrop" id="backdrop" onclick="closeWatchlist()"></div>
 
+<!-- Watchlist Panel -->
+<div class="watchlist-panel" id="watchlistPanel">
+  <div class="panel-header">
+    <h2 class="panel-title">WATCHLIST</h2>
+    <button class="close-btn" onclick="closeWatchlist()">✕</button>
+  </div>
+  <div id="watchlistContent"></div>
+</div>
 
-def to_cards_from_tfidf_items(tfidf_items):
-    cards = []
-    for x in tfidf_items or []:
-        tmdb = x.get("tmdb") or {}
-        if tmdb.get("tmdb_id"):
-            cards.append(
-                {
-                    "tmdb_id": tmdb["tmdb_id"],
-                    "title": tmdb.get("title") or x.get("title") or "Untitled",
-                    "poster_url": tmdb.get("poster_url"),
-                }
-            )
-    return cards
+<!-- Movie Modal -->
+<div class="modal-overlay" id="movieModal">
+  <div class="modal">
+    <div class="modal-poster" id="modalPosterWrap">
+      <div class="modal-poster-fallback" id="modalPosterFallback"></div>
+      <img id="modalPosterImg" src="" alt="" onerror="this.style.display='none'" style="position:relative;z-index:1;">
+    </div>
+    <div class="modal-body">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-rating" id="modalRating"></div>
+    <h2 class="modal-title" id="modalTitle"></h2>
+    <div class="modal-meta" id="modalMeta"></div>
+    <p class="modal-desc" id="modalDesc"></p>
+    <div class="modal-actions">
+      <button class="btn-primary" id="modalWatchlistBtn" onclick="addFromModal()">+ Watchlist</button>
+      <button class="btn-outline" onclick="closeModal()">Close</button>
+    </div>
+    </div>
+  </div>
+</div>
 
+<script>
+// ─── Data ───────────────────────────────────────────────────────────────────
+// TMDB image base URL - using their public CDN
+const TMDB_IMG = 'https://image.tmdb.org/t/p/w500';
 
-# =============================
-# IMPORTANT: Robust TMDB search parsing
-# Supports BOTH API shapes:
-# 1) raw TMDB: {"results":[{id,title,poster_path,...}]}
-# 2) list cards: [{tmdb_id,title,poster_url,...}]
-# =============================
-def parse_tmdb_search_to_cards(data, keyword: str, limit: int = 24):
-    """
-    Returns:
-      suggestions: list[(label, tmdb_id)]
-      cards: list[{tmdb_id,title,poster_url}]
-    """
-    keyword_l = keyword.strip().lower()
+const MOVIES = [
+  { id:1,  title:"Blade Runner 2049",            year:2017, rating:8.0, runtime:"2h 44m", director:"Denis Villeneuve",   genres:["scifi","thriller","drama"],           moods:["dark","mindblowing"],              era:5, desc:"Officer K unearths a long-buried secret that has the potential to plunge what's left of society into chaos. His discovery leads him on a quest to find Rick Deckard, a former LAPD blade runner who has been missing for 30 years.",       poster:"/gajva2L0rPYkEWjzgFlBXCAVBE5.jpg" },
+  { id:2,  title:"Parasite",                     year:2019, rating:8.5, runtime:"2h 12m", director:"Bong Joon-ho",        genres:["drama","thriller","comedy"],           moods:["dark","mindblowing","thrilling"],   era:5, desc:"Greed and class discrimination threaten the newly formed symbiotic relationship between the wealthy Park family and the destitute Kim clan.",                                                                                             poster:"/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg" },
+  { id:3,  title:"The Dark Knight",              year:2008, rating:9.0, runtime:"2h 32m", director:"Christopher Nolan",  genres:["action","thriller","drama"],           moods:["thrilling","dark","mindblowing"],   era:4, desc:"When the menace known as the Joker wreaks havoc and chaos on the people of Gotham, Batman must accept one of the greatest psychological and physical tests of his ability to fight injustice.",                                       poster:"/qJ2tW6WMUDux911r6m7haRef0WH.jpg" },
+  { id:4,  title:"Inception",                    year:2010, rating:8.8, runtime:"2h 28m", director:"Christopher Nolan",  genres:["action","scifi","thriller"],           moods:["mindblowing","thrilling"],          era:5, desc:"A thief who steals corporate secrets through the use of dream-sharing technology is given the inverse task of planting an idea into the mind of a C.E.O.",                                                                         poster:"/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg" },
+  { id:5,  title:"Her",                          year:2013, rating:8.0, runtime:"2h 6m",  director:"Spike Jonze",        genres:["drama","romance","scifi"],             moods:["emotional","romantic","dark"],      era:5, desc:"In a near future, a lonely writer develops an unlikely relationship with an operating system designed to meet his every need.",                                                                                                     poster:"/eCOtqtfvn7mxGEDcgsP5UtxQKgk.jpg" },
+  { id:6,  title:"Mulholland Drive",             year:2001, rating:7.9, runtime:"2h 27m", director:"David Lynch",        genres:["drama","mystery","thriller"],          moods:["dark","mindblowing"],              era:4, desc:"After a beautiful woman is left amnesiac following a car crash, a perky aspiring actress takes her in as they try to figure out the truth behind a Hollywood mystery.",                                                             poster:"/55ePmTFkd6aJvmEoAlByjV8tMVn.jpg" },
+  { id:7,  title:"Eternal Sunshine",             year:2004, rating:8.3, runtime:"1h 48m", director:"Michel Gondry",      genres:["drama","romance","scifi"],             moods:["emotional","romantic","mindblowing"],era:4, desc:"When their relationship turns sour, a couple undergoes a medical procedure to have each other erased from their memories.",                                                                                                  poster:"/5MwkWH9tYHv3mV9OdYTMR5qreIz.jpg" },
+  { id:8,  title:"The Grand Budapest Hotel",     year:2014, rating:8.1, runtime:"1h 39m", director:"Wes Anderson",       genres:["comedy","drama","mystery"],            moods:["funny","cozy"],                     era:5, desc:"A writer encounters the owner of an aging high-class hotel, who tells him of his early years serving as a lobby boy in the hotel's glory days.",                                                                                    poster:"/eWdyYQreja6JGCzqHWXpWHDrrPo.jpg" },
+  { id:9,  title:"Whiplash",                     year:2014, rating:8.5, runtime:"1h 47m", director:"Damien Chazelle",    genres:["drama","thriller"],                    moods:["thrilling","inspiring","dark"],     era:5, desc:"A promising young drummer enrolls at a cut-throat music conservatory where his dreams of greatness are mentored by an instructor who will stop at nothing to realize a student's potential.",                                    poster:"/fRGxZuo7jJUWQsVg9PREb98Aclp.jpg" },
+  { id:10, title:"Get Out",                      year:2017, rating:7.7, runtime:"1h 44m", director:"Jordan Peele",       genres:["horror","mystery","thriller"],         moods:["thrilling","dark","mindblowing"],   era:5, desc:"A young African-American visits his white girlfriend's parents for the weekend, where his simmering unease about their family feels increasingly ominous.",                                                                        poster:"/tFXcEccSQMf3lfhfXKSU9iRBpa3.jpg" },
+  { id:11, title:"Mad Max: Fury Road",           year:2015, rating:8.1, runtime:"2h 0m",  director:"George Miller",      genres:["action","scifi"],                      moods:["thrilling","mindblowing"],          era:5, desc:"In a post-apocalyptic wasteland, a woman rebels against a tyrannical ruler in search for her homeland with the aid of a group of female prisoners and a drifter.",                                                                poster:"/8tZYtuWezp8JbcsvHYO0O46tFbo.jpg" },
+  { id:12, title:"Spirited Away",                year:2001, rating:9.3, runtime:"2h 5m",  director:"Hayao Miyazaki",     genres:["animation","fantasy","drama"],         moods:["cozy","emotional","inspiring"],     era:4, desc:"During her family's move to the suburbs, a sullen 10-year-old girl wanders into a world ruled by gods, witches, and spirits.",                                                                                                   poster:"/39wmItIWsg5sZMyRUHLkWBcuVCM.jpg" },
+  { id:13, title:"Arrival",                      year:2016, rating:7.9, runtime:"1h 56m", director:"Denis Villeneuve",   genres:["scifi","drama","mystery"],             moods:["emotional","mindblowing","dark"],   era:5, desc:"A linguist works with the military to communicate with alien lifeforms after twelve mysterious spacecraft appear around the world.",                                                                                             poster:"/x2FJsf1ElAgr63Y3PNPtJrcmpoe.jpg" },
+  { id:14, title:"Fight Club",                   year:1999, rating:8.8, runtime:"2h 19m", director:"David Fincher",      genres:["drama","thriller"],                    moods:["dark","mindblowing","thrilling"],   era:3, desc:"An insomniac office worker and a devil-may-care soapmaker form an underground fight club that evolves into something much, much more.",                                                                                          poster:"/pB8BM7pdSp6B6Ih7QZ4DrQ3PmJK.jpg" },
+  { id:15, title:"Amélie",                       year:2001, rating:8.3, runtime:"2h 2m",  director:"Jean-Pierre Jeunet", genres:["comedy","romance","drama"],            moods:["romantic","cozy","inspiring","funny"],era:4, desc:"Amélie is an innocent and naive girl in Paris with her own sense of justice. She decides to help those around her and, along the way, discovers love.",                                                                 poster:"/wlFPOUHOJwMdtmFMBpDnHTqHx0c.jpg" },
+  { id:16, title:"Schindler's List",             year:1993, rating:9.0, runtime:"3h 15m", director:"Steven Spielberg",   genres:["drama","thriller"],                    moods:["emotional","dark","inspiring"],     era:3, desc:"In German-occupied Poland during World War II, industrialist Oskar Schindler gradually becomes concerned for his Jewish workforce after witnessing their persecution.",                                                          poster:"/sF1U4EUQS8YHUYjNl3pMGNIQyr0.jpg" },
+  { id:17, title:"Interstellar",                 year:2014, rating:8.6, runtime:"2h 49m", director:"Christopher Nolan",  genres:["scifi","drama","thriller"],            moods:["emotional","mindblowing","thrilling"],era:5, desc:"When Earth becomes uninhabitable in the future, a farmer and ex-NASA pilot, Joseph Cooper, is tasked to pilot a spacecraft, along with a team of researchers, to find a new planet for humans.",                         poster:"/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg" },
+  { id:18, title:"Oldboy",                       year:2003, rating:8.4, runtime:"2h",     director:"Park Chan-wook",     genres:["action","drama","mystery","thriller"], moods:["dark","thrilling","mindblowing"],   era:4, desc:"After being kidnapped and imprisoned for fifteen years, Oh Dae-Su is released, only to find that he must find his captor in five days.",                                                                                         poster:"/pWDtjs568ZfOTMbURQBYuT4Qxka.jpg" },
+  { id:19, title:"The Lobster",                  year:2015, rating:7.1, runtime:"1h 59m", director:"Yorgos Lanthimos",   genres:["drama","scifi","romance"],             moods:["dark","funny","mindblowing"],       era:5, desc:"In a dystopian near future, single people must find a romantic partner within 45 days or be transformed into an animal.",                                                                                                     poster:"/lHBAFkLpZxjlTJl5CxzGDRiXFua.jpg" },
+  { id:20, title:"Princess Mononoke",            year:1997, rating:8.4, runtime:"2h 14m", director:"Hayao Miyazaki",     genres:["animation","fantasy","drama"],         moods:["inspiring","emotional","dark"],     era:3, desc:"On a journey to find the cure for a Tatarigami's curse, Ashitaka finds himself in the middle of a war between the forest gods and Tatara, a mining colony.",                                                                poster:"/jHZmOlB7NLpGDtmSCubTQjpRLKg.jpg" },
+  { id:21, title:"No Country for Old Men",       year:2007, rating:8.1, runtime:"2h 2m",  director:"Coen Brothers",      genres:["crime","drama","thriller"],            moods:["dark","thrilling"],                 era:4, desc:"Violence and mayhem ensue after a hunter stumbles upon a drug deal gone wrong and more than two million dollars in cash near the Rio Grande.",                                                                                   poster:"/6LEoAepBp0vCo5GC5GGHrphcjJj.jpg" },
+  { id:22, title:"Before Sunrise",               year:1995, rating:8.1, runtime:"1h 41m", director:"Richard Linklater",  genres:["drama","romance"],                     moods:["romantic","cozy","emotional"],      era:3, desc:"A young man and woman meet on a train in Europe, and wind up spending one evening together in Vienna.",                                                                                                                         poster:"/tlrBDLGMzDdJW4lbMLEYf0JN8W9.jpg" },
+  { id:23, title:"The Shining",                  year:1980, rating:8.4, runtime:"2h 26m", director:"Stanley Kubrick",    genres:["drama","horror","thriller"],           moods:["dark","thrilling"],                 era:2, desc:"A family heads to an isolated hotel for the winter where a sinister presence influences the father into violence, while his psychic son sees horrific forebodings from the past and future.",                                      poster:"/b6ko0IKC8MdYBBPkkA1aBPLe2yz.jpg" },
+  { id:24, title:"2001: A Space Odyssey",        year:1968, rating:8.3, runtime:"2h 29m", director:"Stanley Kubrick",    genres:["scifi","mystery","drama"],             moods:["mindblowing","dark"],              era:1, desc:"After discovering a mysterious artifact buried beneath the Lunar surface, mankind sets off on a quest to find its origins with the help of intelligent supercomputer H.A.L. 9000.",                                           poster:"/ve72VxNqjU7CVvvwANyGBkMkAxz.jpg" },
+];
 
-    # A) If API returns dict with 'results'
-    if isinstance(data, dict) and "results" in data:
-        raw = data.get("results") or []
-        raw_items = []
-        for m in raw:
-            title = (m.get("title") or "").strip()
-            tmdb_id = m.get("id")
-            poster_path = m.get("poster_path")
-            if not title or not tmdb_id:
-                continue
-            raw_items.append(
-                {
-                    "tmdb_id": int(tmdb_id),
-                    "title": title,
-                    "poster_url": f"{TMDB_IMG}{poster_path}" if poster_path else None,
-                    "release_date": m.get("release_date", ""),
-                }
-            )
+// State
+let watchlist = [];
+let currentFilters = { moods: [], genres: [], era: 0, search: '' };
+let modalMovie = null;
 
-    # B) If API returns already as list
-    elif isinstance(data, list):
-        raw_items = []
-        for m in data:
-            # might be {tmdb_id,title,poster_url}
-            tmdb_id = m.get("tmdb_id") or m.get("id")
-            title = (m.get("title") or "").strip()
-            poster_url = m.get("poster_url")
-            if not title or not tmdb_id:
-                continue
-            raw_items.append(
-                {
-                    "tmdb_id": int(tmdb_id),
-                    "title": title,
-                    "poster_url": poster_url,
-                    "release_date": m.get("release_date", ""),
-                }
-            )
-    else:
-        return [], []
+// ─── Cursor ──────────────────────────────────────────────────────────────────
+const cursor = document.getElementById('cursor');
+const cursorRing = document.getElementById('cursorRing');
+document.addEventListener('mousemove', e => {
+  cursor.style.left = e.clientX + 'px';
+  cursor.style.top = e.clientY + 'px';
+  setTimeout(() => {
+    cursorRing.style.left = e.clientX + 'px';
+    cursorRing.style.top = e.clientY + 'px';
+  }, 60);
+});
 
-    # Word-match filtering (contains)
-    matched = [x for x in raw_items if keyword_l in x["title"].lower()]
+// ─── Ticker ──────────────────────────────────────────────────────────────────
+const tickerEl = document.getElementById('ticker');
+const tickerMovies = MOVIES.map(m => m.title).join(' ◆ ');
+tickerEl.innerHTML = `<span>${tickerMovies}</span><span>${tickerMovies}</span>`;
 
-    # If nothing matched, fallback to raw list (so never blank)
-    final_list = matched if matched else raw_items
+// ─── Moods ───────────────────────────────────────────────────────────────────
+document.querySelectorAll('.mood-tag').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const mood = btn.dataset.mood;
+    btn.classList.toggle('active');
+    if (currentFilters.moods.includes(mood)) {
+      currentFilters.moods = currentFilters.moods.filter(m => m !== mood);
+    } else {
+      currentFilters.moods.push(mood);
+    }
+  });
+});
 
-    # Suggestions = top 10 labels
-    suggestions = []
-    for x in final_list[:10]:
-        year = (x.get("release_date") or "")[:4]
-        label = f"{x['title']} ({year})" if year else x["title"]
-        suggestions.append((label, x["tmdb_id"]))
+// ─── Genres ──────────────────────────────────────────────────────────────────
+document.querySelectorAll('.genre-item').forEach(item => {
+  item.addEventListener('click', () => {
+    const genre = item.dataset.genre;
+    item.classList.toggle('selected');
+    if (currentFilters.genres.includes(genre)) {
+      currentFilters.genres = currentFilters.genres.filter(g => g !== genre);
+    } else {
+      currentFilters.genres.push(genre);
+    }
+  });
+});
 
-    # Cards = top N
-    cards = [
-        {"tmdb_id": x["tmdb_id"], "title": x["title"], "poster_url": x["poster_url"]}
-        for x in final_list[:limit]
-    ]
-    return suggestions, cards
+// ─── Era ─────────────────────────────────────────────────────────────────────
+const eraLabels = ['Any Decade', '1960s–70s', '1980s', '1990s', '2000s', 'Modern (2010s+)'];
+function updateEra(val) {
+  document.getElementById('eraLabel').textContent = eraLabels[val];
+  currentFilters.era = parseInt(val);
+}
 
+// ─── Search ──────────────────────────────────────────────────────────────────
+function handleSearch() {
+  currentFilters.search = document.getElementById('searchInput').value.trim().toLowerCase();
+  getRecommendations();
+}
+document.getElementById('searchInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') handleSearch();
+});
 
-# =============================
-# SIDEBAR (clean)
-# =============================
-with st.sidebar:
-    st.markdown("## 🎬 Menu")
-    if st.button("🏠 Home"):
-        goto_home()
+// ─── Filter Logic ────────────────────────────────────────────────────────────
+function filterMovies() {
+  return MOVIES.filter(movie => {
+    if (currentFilters.search) {
+      const q = currentFilters.search;
+      if (!movie.title.toLowerCase().includes(q) &&
+          !movie.director.toLowerCase().includes(q) &&
+          !movie.genres.some(g => g.includes(q))) return false;
+    }
+    if (currentFilters.genres.length > 0) {
+      if (!currentFilters.genres.some(g => movie.genres.includes(g))) return false;
+    }
+    if (currentFilters.moods.length > 0) {
+      if (!currentFilters.moods.some(m => movie.moods.includes(m))) return false;
+    }
+    if (currentFilters.era > 0) {
+      if (movie.era !== currentFilters.era) return false;
+    }
+    return true;
+  });
+}
 
-    st.markdown("---")
-    st.markdown("### 🏠 Home Feed (only home)")
-    home_category = st.selectbox(
-        "Category",
-        ["trending", "popular", "top_rated", "now_playing", "upcoming"],
-        index=0,
-    )
-    grid_cols = st.slider("Grid columns", 4, 8, 6)
+// ─── Recommendations ─────────────────────────────────────────────────────────
+function getRecommendations() {
+  const loading = document.getElementById('loading');
+  const resultsSection = document.getElementById('resultsSection');
 
-# =============================
-# HEADER
-# =============================
-st.title("🎬 Movie Recommender")
-st.markdown(
-    "<div class='small-muted'>Type keyword → dropdown suggestions + matching results → open → details + recommendations</div>",
-    unsafe_allow_html=True,
-)
-st.divider()
+  loading.classList.add('show');
+  resultsSection.style.display = 'none';
 
-# ==========================================================
-# VIEW: HOME
-# ==========================================================
-if st.session_state.view == "home":
-    typed = st.text_input(
-        "Search by movie title (keyword)", placeholder="Type: avenger, batman, love..."
-    )
+  setTimeout(() => {
+    loading.classList.remove('show');
+    resultsSection.style.display = 'block';
+    const filtered = filterMovies();
+    renderMovies(filtered);
+  }, 900);
+}
 
-    st.divider()
+function showAll() {
+  document.getElementById('discover').scrollIntoView({ behavior: 'smooth' });
+  setTimeout(() => {
+    document.getElementById('resultsSection').style.display = 'block';
+    renderMovies(MOVIES);
+  }, 400);
+}
 
-    # SEARCH MODE (Autocomplete + word-match results)
-    if typed.strip():
-        if len(typed.strip()) < 2:
-            st.caption("Type at least 2 characters for suggestions.")
-        else:
-            data, err = api_get_json("/tmdb/search", params={"query": typed.strip()})
+// ─── Render ──────────────────────────────────────────────────────────────────
+function renderMovies(movies) {
+  const grid = document.getElementById('moviesGrid');
+  const count = document.getElementById('resultsCount');
+  const noResults = document.getElementById('noResults');
 
-            if err or data is None:
-                st.error(f"Search failed: {err}")
-            else:
-                suggestions, cards = parse_tmdb_search_to_cards(
-                    data, typed.strip(), limit=24
-                )
+  grid.innerHTML = '';
+  count.textContent = `${movies.length} film${movies.length !== 1 ? 's' : ''}`;
 
-                # Dropdown
-                if suggestions:
-                    labels = ["-- Select a movie --"] + [s[0] for s in suggestions]
-                    selected = st.selectbox("Suggestions", labels, index=0)
+  if (movies.length === 0) {
+    noResults.style.display = 'block';
+    return;
+  }
+  noResults.style.display = 'none';
 
-                    if selected != "-- Select a movie --":
-                        # map label -> id
-                        label_to_id = {s[0]: s[1] for s in suggestions}
-                        goto_details(label_to_id[selected])
-                else:
-                    st.info("No suggestions found. Try another keyword.")
+  movies.forEach((movie, i) => {
+    const card = document.createElement('div');
+    card.className = 'movie-card';
+    card.style.animationDelay = `${i * 0.06}s`;
+    const inWatchlist = watchlist.some(w => w.id === movie.id);
+    card.innerHTML = `
+      <div class="movie-poster">
+        <div class="movie-poster-inner">
+          <div class="poster-fallback">${movie.title.slice(0,2).toUpperCase()}</div>
+          <img src="${TMDB_IMG}${movie.poster}" alt="${movie.title}" loading="lazy"
+               onerror="this.style.display='none'" style="position:relative;z-index:1;">
+        </div>
+        <div class="movie-badge">${movie.rating}</div>
+        <div class="movie-overlay">
+          <button class="overlay-btn primary" onclick="openModal(${movie.id})">Details</button>
+          <button class="overlay-btn secondary" onclick="toggleWatchlist(${movie.id}, event)">${inWatchlist ? '✓ In List' : '+ Watchlist'}</button>
+        </div>
+      </div>
+      <div class="movie-info">
+        <div class="movie-title">${movie.title}</div>
+        <div class="movie-meta">
+          <span class="movie-rating">★ ${movie.rating}</span>
+          <span class="movie-dot"></span>
+          <span>${movie.year}</span>
+          <span class="movie-dot"></span>
+          <span>${movie.runtime}</span>
+        </div>
+        <div class="movie-genres-small">
+          ${movie.genres.slice(0,2).map(g => `<span class="genre-pill">${g}</span>`).join('')}
+        </div>
+      </div>`;
+    grid.appendChild(card);
+  });
+}
 
-                st.markdown("### Results")
-                poster_grid(cards, cols=grid_cols, key_prefix="search_results")
+// ─── Watchlist ────────────────────────────────────────────────────────────────
+function toggleWatchlist(id, e) {
+  if (e) e.stopPropagation();
+  const movie = MOVIES.find(m => m.id === id);
+  if (!movie) return;
+  const idx = watchlist.findIndex(w => w.id === id);
+  if (idx > -1) {
+    watchlist.splice(idx, 1);
+  } else {
+    watchlist.push(movie);
+  }
+  document.getElementById('watchlistCount').textContent = watchlist.length;
+  renderWatchlist();
+  // Re-render current results
+  const resultsSection = document.getElementById('resultsSection');
+  if (resultsSection.style.display !== 'none') {
+    const filtered = filterMovies();
+    renderMovies(filtered.length > 0 || currentFilters.moods.length || currentFilters.genres.length || currentFilters.era || currentFilters.search ? filtered : MOVIES.filter((_, i) => i < 24));
+  }
+}
 
-        st.stop()
+function openWatchlist() {
+  document.getElementById('watchlistPanel').classList.add('open');
+  document.getElementById('backdrop').classList.add('show');
+}
 
-    # HOME FEED MODE
-    st.markdown(f"### 🏠 Home — {home_category.replace('_',' ').title()}")
+function closeWatchlist() {
+  document.getElementById('watchlistPanel').classList.remove('open');
+  document.getElementById('backdrop').classList.remove('show');
+}
 
-    home_cards, err = api_get_json(
-        "/home", params={"category": home_category, "limit": 24}
-    )
-    if err or not home_cards:
-        st.error(f"Home feed failed: {err or 'Unknown error'}")
-        st.stop()
+function renderWatchlist() {
+  const content = document.getElementById('watchlistContent');
+  if (watchlist.length === 0) {
+    content.innerHTML = `<div class="watchlist-empty"><span>◻</span>Your watchlist is empty.<br>Add films you want to watch.</div>`;
+    return;
+  }
+  content.innerHTML = watchlist.map((movie, i) => `
+    <div class="watchlist-item">
+      <div class="watchlist-item-num">${String(i+1).padStart(2,'0')}</div>
+      <div class="watchlist-item-info">
+        <div class="watchlist-item-title">${movie.title}</div>
+        <div class="watchlist-item-meta">${movie.year} · ${movie.runtime} · ★ ${movie.rating}</div>
+      </div>
+      <button class="remove-btn" onclick="toggleWatchlist(${movie.id})">✕</button>
+    </div>`).join('');
+}
 
-    poster_grid(home_cards, cols=grid_cols, key_prefix="home_feed")
+// ─── Modal ────────────────────────────────────────────────────────────────────
+function openModal(id) {
+  const movie = MOVIES.find(m => m.id === id);
+  if (!movie) return;
+  modalMovie = movie;
+  document.getElementById('modalRating').textContent = `★ ${movie.rating}`;
+  document.getElementById('modalTitle').textContent = movie.title;
+  document.getElementById('modalMeta').innerHTML = `
+    <span><strong>Director</strong> ${movie.director}</span>
+    <span><strong>Year</strong> ${movie.year}</span>
+    <span><strong>Runtime</strong> ${movie.runtime}</span>
+    <span><strong>Genres</strong> ${movie.genres.join(', ')}</span>`;
+  document.getElementById('modalDesc').textContent = movie.desc;
+  // Poster
+  const img = document.getElementById('modalPosterImg');
+  img.src = TMDB_IMG + movie.poster;
+  img.alt = movie.title;
+  img.style.display = 'block';
+  document.getElementById('modalPosterFallback').textContent = movie.title.slice(0,2).toUpperCase();
+  const inWatchlist = watchlist.some(w => w.id === id);
+  document.getElementById('modalWatchlistBtn').textContent = inWatchlist ? '✓ In Watchlist' : '+ Watchlist';
+  document.getElementById('movieModal').classList.add('open');
+}
 
-# ==========================================================
-# VIEW: DETAILS
-# ==========================================================
-elif st.session_state.view == "details":
-    tmdb_id = st.session_state.selected_tmdb_id
-    if not tmdb_id:
-        st.warning("No movie selected.")
-        if st.button("← Back to Home"):
-            goto_home()
-        st.stop()
+function addFromModal() {
+  if (modalMovie) {
+    toggleWatchlist(modalMovie.id);
+    const inWatchlist = watchlist.some(w => w.id === modalMovie.id);
+    document.getElementById('modalWatchlistBtn').textContent = inWatchlist ? '✓ In Watchlist' : '+ Watchlist';
+  }
+}
 
-    # Top bar
-    a, b = st.columns([3, 1])
-    with a:
-        st.markdown("### 📄 Movie Details")
-    with b:
-        if st.button("← Back to Home"):
-            goto_home()
+function closeModal() {
+  document.getElementById('movieModal').classList.remove('open');
+}
 
-    # Details (your FastAPI safe route)
-    data, err = api_get_json(f"/movie/id/{tmdb_id}")
-    if err or not data:
-        st.error(f"Could not load details: {err or 'Unknown error'}")
-        st.stop()
+document.getElementById('movieModal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
 
-    # Layout: Poster LEFT, Details RIGHT
-    left, right = st.columns([1, 2.4], gap="large")
+// Init watchlist render
+renderWatchlist();
 
-    with left:
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        if data.get("poster_url"):
-            st.image(data["poster_url"], use_column_width=True)
-        else:
-            st.write("🖼️ No poster")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with right:
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.markdown(f"## {data.get('title','')}")
-        release = data.get("release_date") or "-"
-        genres = ", ".join([g["name"] for g in data.get("genres", [])]) or "-"
-        st.markdown(
-            f"<div class='small-muted'>Release: {release}</div>", unsafe_allow_html=True
-        )
-        st.markdown(
-            f"<div class='small-muted'>Genres: {genres}</div>", unsafe_allow_html=True
-        )
-        st.markdown("---")
-        st.markdown("### Overview")
-        st.write(data.get("overview") or "No overview available.")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    if data.get("backdrop_url"):
-        st.markdown("#### Backdrop")
-        st.image(data["backdrop_url"], use_column_width=True)
-
-    st.divider()
-    st.markdown("### ✅ Recommendations")
-
-    # Recommendations (TF-IDF + Genre) via your bundle endpoint
-    title = (data.get("title") or "").strip()
-    if title:
-        bundle, err2 = api_get_json(
-            "/movie/search",
-            params={"query": title, "tfidf_top_n": 12, "genre_limit": 12},
-        )
-
-        if not err2 and bundle:
-            st.markdown("#### 🔎 Similar Movies (TF-IDF)")
-            poster_grid(
-                to_cards_from_tfidf_items(bundle.get("tfidf_recommendations")),
-                cols=grid_cols,
-                key_prefix="details_tfidf",
-            )
-
-            st.markdown("#### 🎭 More Like This (Genre)")
-            poster_grid(
-                bundle.get("genre_recommendations", []),
-                cols=grid_cols,
-                key_prefix="details_genre",
-            )
-        else:
-            st.info("Showing Genre recommendations (fallback).")
-            genre_only, err3 = api_get_json(
-                "/recommend/genre", params={"tmdb_id": tmdb_id, "limit": 18}
-            )
-            if not err3 and genre_only:
-                poster_grid(
-                    genre_only, cols=grid_cols, key_prefix="details_genre_fallback"
-                )
-            else:
-                st.warning("No recommendations available right now.")
-    else:
-        st.warning("No title available to compute recommendations.")
+// Show initial results
+setTimeout(() => {
+  document.getElementById('resultsSection').style.display = 'block';
+  renderMovies(MOVIES);
+}, 100);
+</script>
+</body>
+</html>
